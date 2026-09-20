@@ -88,6 +88,8 @@ function listSongs() {
   console.log(`\nProgress : ${songProgressBar} (${Math.round(elapsedDuration)}s / ${totalDuration}s)`);
   console.log(`Volume   : ${volumeProgressBar} ${isMuted ? '[MUTED]' : ''}`);
   console.log(`Status   : ${isPaused ? 'PAUSED' : 'PLAYING'}`);
+  console.log('\n[Up/Down]: Navigate | [Enter]: Play | [P]: Pause/Resume | [N]: Next | [B]: Prev');
+  console.log('[+ / =]: Vol Up | [-]: Vol Down | [M]: Mute | [S]: Shuffle/Random | [Ctrl+C]: Exit');
 
 }
 
