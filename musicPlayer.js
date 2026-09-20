@@ -54,6 +54,7 @@ function getTotalDurationOfSong(songPath) {
 
 function playSong(index) {
   if (playerProcess) {
+    playerProcess.removeAllListeners('close');
     playerProcess.kill('SIGKILL');
   }
 
@@ -69,7 +70,13 @@ function playSong(index) {
 
   isPaused = false;
   isMuted = false;
-  currentVolume = 256;
+
+  playerProcess.on('close', () => {
+    if (!isPaused) {
+      playSong(userChoice + 1);
+    }
+  });
+
   listSongs();
 }
 
@@ -88,15 +95,17 @@ function listSongs() {
   console.log(`\nProgress : ${songProgressBar} (${Math.round(elapsedDuration)}s / ${totalDuration}s)`);
   console.log(`Volume   : ${volumeProgressBar} ${isMuted ? '[MUTED]' : ''}`);
   console.log(`Status   : ${isPaused ? 'PAUSED' : 'PLAYING'}`);
-  console.log('\n[Up/Down]: Navigate | [Enter]: Play | [P]: Pause/Resume | [N]: Next | [B]: Prev');
-  console.log('[+ / =]: Vol Up | [-]: Vol Down | [M]: Mute | [S]: Shuffle/Random | [Ctrl+C]: Exit');
-
+  console.log('\n[Up/Down]: Navigate | [Left/Right]: Seek -10s/+10s | [Enter]: Play');
+  console.log('[P]: Pause/Resume | [N]: Next | [B]: Prev | [S]: Shuffle | [+ / -]: Vol | [M]: Mute | [Ctrl+C]: Exit');
 }
 
 process.stdin.on('data', (data) => {
   // Exit: Ctrl+C
   if (data[0] === 0x03) {
-    if (playerProcess) playerProcess.kill('SIGKILL');
+    if (playerProcess) {
+      playerProcess.removeAllListeners('close');
+      playerProcess.kill('SIGKILL');
+    }
     process.exit(0);
   }
 
@@ -106,7 +115,7 @@ process.stdin.on('data', (data) => {
   // Prev: b
   if (data[0] === 0x62) playSong(userChoice - 1);
 
-  // Shuffle / Random Song: s (0x73)
+  // Shuffle / Random Song: s
   if (data[0] === 0x73) {
     const randomIndex = Math.floor(Math.random() * songMenu.length);
     playSong(randomIndex);
@@ -153,13 +162,21 @@ process.stdin.on('data', (data) => {
   // Play Selected: Enter
   if (data[0] === 0x0d) playSong(userChoice);
 
-  // Navigation: Arrow Keys
+  // Arrow Key Navigation & Seeking
   if (data[0] === 0x1b && data[1] === 0x5b) {
-    if (data[2] === 0x41) { // Up
+    if (data[2] === 0x41) { // Up Arrow
       userChoice = (userChoice - 1 + songMenu.length) % songMenu.length;
       listSongs();
-    } else if (data[2] === 0x42) { // Down
+    } else if (data[2] === 0x42) { // Down Arrow
       userChoice = (userChoice + 1) % songMenu.length;
+      listSongs();
+    } else if (data[2] === 0x43 && playerProcess) { // Right Arrow (+10s)
+      playerProcess.stdin.write('seek +10\n');
+      elapsedDuration = Math.min(elapsedDuration + 10, totalDuration);
+      listSongs();
+    } else if (data[2] === 0x44 && playerProcess) { // Left Arrow (-10s)
+      playerProcess.stdin.write('seek -10\n');
+      elapsedDuration = Math.max(elapsedDuration - 10, 0);
       listSongs();
     }
   }
@@ -168,9 +185,12 @@ process.stdin.on('data', (data) => {
 setInterval(() => {
   if (!isPaused && playerProcess) {
     elapsedDuration += 0.2;
-    if (totalDuration > 0 && elapsedDuration > totalDuration) {
-      elapsedDuration = totalDuration;
+
+    if (totalDuration > 0 && elapsedDuration >= totalDuration) {
+      playSong(userChoice + 1);
+      return;
     }
+
     listSongs();
   }
 }, 200);
