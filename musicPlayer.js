@@ -10,10 +10,15 @@ process.stdin.setRawMode(true);
 process.stdin.resume();
 
 let isPaused = true;
+let isMuted = false;
 let playerProcess = null;
 let userChoice = 0;
 let elapsedDuration = 0;
 let totalDuration = 0;
+
+// Volume state (0 to 256; 256 = 100%)
+let currentVolume = 256;
+let previousVolume = 256;
 
 const songMenu = [
   path.join(__dirname, 'songs/Spider-Man_-_The_Spectacular_Spiderman_Theme_(mp3.pm) 2.mp3'),
@@ -21,9 +26,9 @@ const songMenu = [
   path.join(__dirname, 'songs/vidssave.com Ultimate SpiderMan theme 257 copy.mp3')
 ];
 
-function drawProgressBar(current, total, width = 30) {
-  if (!total || total === 0) return '[' + '░'.repeat(width) + '] 0%';
-  const percentage = Math.min(Math.max(current / total, 0), 1);
+function drawBar(current, max, width = 30) {
+  if (!max || max === 0) return '[' + '░'.repeat(width) + '] 0%';
+  const percentage = Math.min(Math.max(current / max, 0), 1);
   const filledLength = Math.round(width * percentage);
   const emptyLength = width - filledLength;
   const bar = '█'.repeat(filledLength) + '░'.repeat(emptyLength);
@@ -59,12 +64,13 @@ function playSong(index) {
 
   getTotalDurationOfSong(songMenu[userChoice]);
 
-  // Spawning VLC with rc interface using pipe stdio settings
   playerProcess = spawn('vlc', ['-I', 'rc', '--no-video', songMenu[userChoice]], {
     stdio: ['pipe', 'pipe', 'pipe']
   });
 
   isPaused = false;
+  isMuted = false;
+  currentVolume = 256;
   listSongs();
 }
 
@@ -77,9 +83,12 @@ function listSongs() {
     console.log(`${prefix} ${ind} : ${path.basename(song)}`);
   });
 
-  const progressBar = drawProgressBar(elapsedDuration, totalDuration);
-  console.log(`\nProgress: ${progressBar}`);
-  console.log(`Elapsed / Total: ${Math.round(elapsedDuration)}s / ${totalDuration}s`);
+  const songProgressBar = drawBar(elapsedDuration, totalDuration, 30);
+  const volumeProgressBar = drawBar(isMuted ? 0 : currentVolume, 256, 15);
+
+  console.log(`\nProgress : ${songProgressBar} (${Math.round(elapsedDuration)}s / ${totalDuration}s)`);
+  console.log(`Volume   : ${volumeProgressBar} ${isMuted ? '[MUTED]' : ''}`);
+  console.log(`Status   : ${isPaused ? 'PAUSED' : 'PLAYING'}`);
 }
 
 process.stdin.on('data', (data) => {
@@ -99,6 +108,37 @@ process.stdin.on('data', (data) => {
   if (data[0] === 0x70 && playerProcess) {
     playerProcess.stdin.write('pause\n');
     isPaused = !isPaused;
+    listSongs();
+  }
+
+  // Volume Up: + or =
+  if ((data[0] === 0x2b || data[0] === 0x3d) && playerProcess) {
+    if (isMuted) isMuted = false; // Unmute on volume change
+    currentVolume = Math.min(currentVolume + 16, 256); // Increase by ~6.25% steps
+    playerProcess.stdin.write(`volume ${currentVolume}\n`);
+    listSongs();
+  }
+
+  // Volume Down: -
+  if (data[0] === 0x2d && playerProcess) {
+    if (isMuted) isMuted = false;
+    currentVolume = Math.max(currentVolume - 16, 0);
+    playerProcess.stdin.write(`volume ${currentVolume}\n`);
+    listSongs();
+  }
+
+  // Toggle Mute: m
+  if (data[0] === 0x6d && playerProcess) {
+    if (!isMuted) {
+      previousVolume = currentVolume;
+      currentVolume = 0;
+      playerProcess.stdin.write('volume 0\n');
+      isMuted = true;
+    } else {
+      currentVolume = previousVolume > 0 ? previousVolume : 256;
+      playerProcess.stdin.write(`volume ${currentVolume}\n`);
+      isMuted = false;
+    }
     listSongs();
   }
 
