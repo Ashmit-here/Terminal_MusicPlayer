@@ -16,7 +16,6 @@ let userChoice = 0;
 let elapsedDuration = 0;
 let totalDuration = 0;
 
-// Volume state (0 to 256; 256 = 100%)
 let currentVolume = 256;
 let previousVolume = 256;
 
@@ -89,6 +88,7 @@ function listSongs() {
   console.log(`\nProgress : ${songProgressBar} (${Math.round(elapsedDuration)}s / ${totalDuration}s)`);
   console.log(`Volume   : ${volumeProgressBar} ${isMuted ? '[MUTED]' : ''}`);
   console.log(`Status   : ${isPaused ? 'PAUSED' : 'PLAYING'}`);
+
 }
 
 process.stdin.on('data', (data) => {
@@ -104,6 +104,12 @@ process.stdin.on('data', (data) => {
   // Prev: b
   if (data[0] === 0x62) playSong(userChoice - 1);
 
+  // Shuffle / Random Song: s (0x73)
+  if (data[0] === 0x73) {
+    const randomIndex = Math.floor(Math.random() * songMenu.length);
+    playSong(randomIndex);
+  }
+
   // Toggle Pause/Play: p
   if (data[0] === 0x70 && playerProcess) {
     playerProcess.stdin.write('pause\n');
@@ -113,8 +119,8 @@ process.stdin.on('data', (data) => {
 
   // Volume Up: + or =
   if ((data[0] === 0x2b || data[0] === 0x3d) && playerProcess) {
-    if (isMuted) isMuted = false; // Unmute on volume change
-    currentVolume = Math.min(currentVolume + 16, 256); // Increase by ~6.25% steps
+    if (isMuted) isMuted = false;
+    currentVolume = Math.min(currentVolume + 16, 256);
     playerProcess.stdin.write(`volume ${currentVolume}\n`);
     listSongs();
   }
