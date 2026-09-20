@@ -19,6 +19,10 @@ let totalDuration = 0;
 let currentVolume = 256;
 let previousVolume = 256;
 
+// Loop modes: 'OFF' | 'ALL' | 'ONE'
+const loopModes = ['OFF', 'ALL', 'ONE'];
+let loopModeIndex = 0; 
+
 const songMenu = [
   path.join(__dirname, 'songs/Spider-Man_-_The_Spectacular_Spiderman_Theme_(mp3.pm) 2.mp3'),
   path.join(__dirname, 'songs/Ultimate_spiderMan_THEME  2.mp3'),
@@ -52,6 +56,22 @@ function getTotalDurationOfSong(songPath) {
   });
 }
 
+function handleNextTrack() {
+  const currentMode = loopModes[loopModeIndex];
+  
+  if (currentMode === 'ONE') {
+    playSong(userChoice); // Replay current song
+  } else if (currentMode === 'ALL') {
+    playSong(userChoice + 1); // Cycle continuously
+  } else if (currentMode === 'OFF') {
+    if (userChoice + 1 < songMenu.length) {
+      playSong(userChoice + 1); // Play next if available
+    } else {
+      isPaused = true; // Stop at end of playlist
+    }
+  }
+}
+
 function playSong(index) {
   if (playerProcess) {
     playerProcess.removeAllListeners('close');
@@ -73,7 +93,7 @@ function playSong(index) {
 
   playerProcess.on('close', () => {
     if (!isPaused) {
-      playSong(userChoice + 1);
+      handleNextTrack();
     }
   });
 
@@ -94,9 +114,10 @@ function listSongs() {
 
   console.log(`\nProgress : ${songProgressBar} (${Math.round(elapsedDuration)}s / ${totalDuration}s)`);
   console.log(`Volume   : ${volumeProgressBar} ${isMuted ? '[MUTED]' : ''}`);
-  console.log(`Status   : ${isPaused ? 'PAUSED' : 'PLAYING'}`);
+  console.log(`Status   : ${isPaused ? 'PAUSED' : 'PLAYING'} | Loop Mode: [ ${loopModes[loopModeIndex]} ]`);
   console.log('\n[Up/Down]: Navigate | [Left/Right]: Seek -10s/+10s | [Enter]: Play');
-  console.log('[P]: Pause/Resume | [N]: Next | [B]: Prev | [S]: Shuffle | [+ / -]: Vol | [M]: Mute | [Ctrl+C]: Exit');
+  console.log('[P]: Pause | [N]: Next | [B]: Prev | [S]: Shuffle | [R]: Toggle Loop');
+  console.log('[+ / -]: Vol | [M]: Mute | [Ctrl+C]: Exit');
 }
 
 process.stdin.on('data', (data) => {
@@ -119,6 +140,12 @@ process.stdin.on('data', (data) => {
   if (data[0] === 0x73) {
     const randomIndex = Math.floor(Math.random() * songMenu.length);
     playSong(randomIndex);
+  }
+
+  // Toggle Loop Mode: r (0x72)
+  if (data[0] === 0x72) {
+    loopModeIndex = (loopModeIndex + 1) % loopModes.length;
+    listSongs();
   }
 
   // Toggle Pause/Play: p
@@ -187,7 +214,7 @@ setInterval(() => {
     elapsedDuration += 0.2;
 
     if (totalDuration > 0 && elapsedDuration >= totalDuration) {
-      playSong(userChoice + 1);
+      handleNextTrack();
       return;
     }
 
