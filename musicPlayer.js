@@ -1,6 +1,11 @@
 const { spawn } = require('child_process');
+const path = require('path');
 
-// Enable raw mode to read keypresses directly
+if (!process.stdin.isTTY) {
+  console.error("Error: Please run this script directly in a terminal using: node musicPlayer.js");
+  process.exit(1);
+}
+
 process.stdin.setRawMode(true);
 process.stdin.resume();
 
@@ -10,26 +15,31 @@ let userChoice = 0;
 let elapsedDuration = 0;
 let totalDuration = 0;
 
-const path = require('path');
-
 const songMenu = [
   path.join(__dirname, 'songs/Spider-Man_-_The_Spectacular_Spiderman_Theme_(mp3.pm) 2.mp3'),
   path.join(__dirname, 'songs/Ultimate_spiderMan_THEME  2.mp3'),
   path.join(__dirname, 'songs/vidssave.com Ultimate SpiderMan theme 257 copy.mp3')
 ];
 
-
-
+function drawProgressBar(current, total, width = 30) {
+  if (!total || total === 0) return '[' + '░'.repeat(width) + '] 0%';
+  const percentage = Math.min(Math.max(current / total, 0), 1);
+  const filledLength = Math.round(width * percentage);
+  const emptyLength = width - filledLength;
+  const bar = '█'.repeat(filledLength) + '░'.repeat(emptyLength);
+  return `[${bar}] ${Math.round(percentage * 100)}%`;
+}
 
 function getTotalDurationOfSong(songPath) {
   const afInfoProcess = spawn('afinfo', [songPath]);
 
   afInfoProcess.stdout.on('data', (data) => {
     const rawOutput = data.toString();
-    if (rawOutput.includes('estimated duration: ')) {
-      totalDuration = Number(rawOutput.split('estimated duration: ')[1].split('.')[0]);
-    } else {
-      totalDuration = 0;
+    if (rawOutput.includes('estimated duration:')) {
+      const match = rawOutput.match(/estimated duration:\s+([\d.]+)/);
+      if (match) {
+        totalDuration = Math.round(parseFloat(match[1]));
+      }
     }
   });
 
@@ -46,11 +56,12 @@ function playSong(index) {
   userChoice = (index + songMenu.length) % songMenu.length;
   elapsedDuration = 0;
   totalDuration = 0;
-  
+
   getTotalDurationOfSong(songMenu[userChoice]);
 
-  playerProcess = spawn('vlc', ['--intf', 'rc', songMenu[userChoice]], {
-    stdio: ['pipe', 'ignore', 'ignore']
+  // Spawning VLC with rc interface using pipe stdio settings
+  playerProcess = spawn('vlc', ['-I', 'rc', '--no-video', songMenu[userChoice]], {
+    stdio: ['pipe', 'pipe', 'pipe']
   });
 
   isPaused = false;
@@ -58,13 +69,18 @@ function playSong(index) {
 }
 
 function listSongs() {
-  process.stdout.write('\x1b[2J\x1b[H'); // Clear screen & reset cursor
+  process.stdout.write('\x1b[2J\x1b[H');
   console.log('--- CLI MUSIC PLAYER ---');
-  
+
   songMenu.forEach((song, ind) => {
     const prefix = ind === userChoice ? '>' : ' ';
-    console.log(`${prefix} ${ind} : ${song}`);
-  })};
+    console.log(`${prefix} ${ind} : ${path.basename(song)}`);
+  });
+
+  const progressBar = drawProgressBar(elapsedDuration, totalDuration);
+  console.log(`\nProgress: ${progressBar}`);
+  console.log(`Elapsed / Total: ${Math.round(elapsedDuration)}s / ${totalDuration}s`);
+}
 
 process.stdin.on('data', (data) => {
   // Exit: Ctrl+C
@@ -79,12 +95,12 @@ process.stdin.on('data', (data) => {
   // Prev: b
   if (data[0] === 0x62) playSong(userChoice - 1);
 
-    // Toggle Pause/Play: p
+  // Toggle Pause/Play: p
   if (data[0] === 0x70 && playerProcess) {
-    playerProcess.stdin.write('pause\n'); // VLC uses 'pause' to toggle both states
+    playerProcess.stdin.write('pause\n');
     isPaused = !isPaused;
+    listSongs();
   }
-
 
   // Play Selected: Enter
   if (data[0] === 0x0d) playSong(userChoice);
